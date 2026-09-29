@@ -1,0 +1,16 @@
+CompileFlags:
+  CompilationDatabase: build
+  Remove:
+    - "-mno-direct-extern-access"
+
+---
+If:
+  PathMatch:
+    - ".*\\.h$"
+
+CompileFlags:
+  Add:
+    - "-xc"
+    - "-std=c23"
+  Remove:
+    - "-std=c++*"

@@ -1,0 +1,8 @@
+.directory/
+.vscode/
+.cache/
+.mimocode/
+.DS_Store/
+.author
+bin/
+build/
