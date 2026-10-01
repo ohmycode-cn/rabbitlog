@@ -4,12 +4,12 @@
 // Copyright (c) ohmycode-cn. All rights reserved.
 // License: MIT
 
-#include "rbbt.hpp"
 #include "preview_format_output.hpp"
+#include "rbbt.hpp"
 #include "test_format.hpp"
-#include "test_output_file.hpp"
-#include "test_output_file2.hpp"
-#include "test_output_file3.hpp"
+#include "test_output_file.hpp"  // IWYU pragma: keep
+#include "test_output_file2.hpp" // IWYU pragma: keep
+#include "test_output_file3.hpp" // IWYU pragma: keep
 #include "test_time26.hpp"
 
 #include <iostream>

@@ -1,4 +1,4 @@
-.directory/
+.directory
 .vscode/
 .cache/
 .mimocode/
@@ -6,3 +6,4 @@
 .author
 bin/
 build/
+tmp/
