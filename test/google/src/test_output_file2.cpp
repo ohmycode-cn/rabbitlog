@@ -121,7 +121,8 @@ namespace {
                     of.output(entry);
                     total += static_cast<long long>(entry.size());
                 }
-            }, t);
+            },
+                                 t);
         }
         for (auto &th : threads) {
             th.join();

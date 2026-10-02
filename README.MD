@@ -29,6 +29,7 @@ what is **ready and usable today**: the project's shell tooling.
 - [Requirements](#requirements)
 - [Shell Scripts](#shell-scripts)
   - [`compile-project.sh`](#compile-projectsh--build-the-project)
+  - [`test-compile-script.sh`](#test-compile-scriptsh--argument-combination-tests)
   - [`filter.sh`](#filtersh--export-the-api-framework)
   - [`mkf.sh`](#mkfsh--create-library-sourceheader-pairs)
   - [`mkf-test.sh`](#mkf-testsh--create-google-test-sourceheader-pairs)
@@ -70,6 +71,12 @@ bash compile-project.sh --clear-build
 
 # Static linking (requires --off-unit-test)
 bash compile-project.sh --static --off-unit-test
+
+# Atomic guard with spinlock locking
+bash compile-project.sh --off-unit-test --atomic --use-atomic-thread-spinlock
+
+# Atomic guard alone — default std::mutex locking
+bash compile-project.sh --off-unit-test --atomic
 ```
 
 | Option | Description |
@@ -77,6 +84,59 @@ bash compile-project.sh --static --off-unit-test
 | `--off-unit-test` | Disable unit tests and build a release binary. |
 | `--clear-build` | Delete `build/*` before building. |
 | `--static` | Statically link the binary. **Must** be combined with `--off-unit-test`. |
+| `--atomic` | Optimization-parameter guard. Opens the optimization section: everything after it must be an optimization parameter (or end of arguments). Other options must appear **before** `--atomic`. |
+| `--use-atomic-thread-spinlock` | Use `std::atomic_flag` spinlock locking in `OutputFile` instead of `std::mutex`. **Must** appear after `--atomic`. |
+
+#### `--atomic` guard rules
+
+`--atomic` is an **ordering guard**, not a CMake variable. It keeps optimization
+parameters from being mixed up with build/layout options:
+
+- Everything after `--atomic` must be an optimization parameter (currently
+  `--use-atomic-thread-spinlock`), or the argument list must end.
+- `--use-atomic-thread-spinlock` is rejected unless it follows `--atomic`.
+- Other options (`--off-unit-test`, `--static`, `--clear-build`, ...) must be
+  placed **before** `--atomic`.
+
+```bash
+# Valid — options first, guard, then optimization parameters
+bash compile-project.sh --off-unit-test --static --atomic --use-atomic-thread-spinlock
+
+# Invalid — --static after the guard
+bash compile-project.sh --atomic --static
+
+# Invalid — spinlock without the guard
+bash compile-project.sh --use-atomic-thread-spinlock
+```
+
+When the spinlock optimization is enabled, the macro
+`USE_ATOMIC_THREAD_SPINLOCK_MODE` is defined for the C++ sources and
+`OutputFile` uses atomic spinlock locking instead of `std::mutex`.
+
+---
+
+### `test-compile-script.sh` — Argument-combination tests
+
+Runs the `compile-project.sh` argument matrix: invalid `--atomic` guard
+combinations must fail fast with a clear error, valid combinations must build
+successfully and set the expected CMake spinlock flags.
+
+```bash
+# Run the full argument-combination test suite
+bash test-compile-script.sh
+```
+
+The suite covers:
+
+- **Invalid combinations** — spinlock without/after `--atomic`, non-optimization
+  options after `--atomic`, `--static` without `--off-unit-test`, unknown flags.
+- **Valid combinations** — `--atomic` alone, `--atomic --use-atomic-thread-spinlock`,
+  static + spinlock, baseline release, default unit-test build.
+- **CMakeCache assertions** — `ATOMIC_THREAD_SPINLOCK_MODE` is `ON`/`OFF` as
+  expected and `ATOMIC_THREAD_MODE` is never written to the cache.
+
+A `PASS`/`FAIL` line is printed per case, with a summary and non-zero exit code
+on any failure.
 
 ---
 
@@ -173,6 +233,7 @@ rabbitlog/
 ├── build/                 # CMake build output
 ├── documents/             # Project documentation
 ├── compile-project.sh     # Build script
+├── test-compile-script.sh # Argument-combination tests for the build script
 ├── filter.sh              # API framework export script
 ├── mkf.sh                 # Source/header scaffold script
 ├── mkf-test.sh            # Test source/header scaffold script

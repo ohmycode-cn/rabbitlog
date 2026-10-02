@@ -34,7 +34,7 @@ namespace rbbl::ott {
 
             // unsafe ! ! !
             if (m_write_item_count > 0) {
-                M_OFS->flush(); // Write remaining items
+                M_OFS->flush(); // Write remaining items if not flushed yet
             }
 
             return true;
@@ -54,27 +54,62 @@ namespace rbbl::ott {
         return ofile();
     }
 
-#if defined(UNLOCK_ATOMIC_THREAD_MODE)
-#else
-    auto OutputFile::lite_output(const rbbl::type::str &logline) -> void {
-        std::lock_guard<std::mutex> lock(M_MTX_OUTPUT_FILE);
-        (*M_OFS) << logline << std::endl;
-    }
-
-    auto OutputFile::optimized_output(const rbbl::type::str &logline) -> void {
-        std::lock_guard<std::mutex> lock(M_MTX_OUTPUT_FILE);
-        (*M_OFS) << logline;
-        m_write_item_count++;
-        if (m_write_item_count >= m_param.write_item) {
+    auto OutputFile::flush_output(const int limit) -> void {
+        if (m_write_item_count++; m_write_item_count >= limit) {
             m_write_item_count = 0;
             M_OFS->flush();
         }
     }
 
+#if defined(USE_ATOMIC_THREAD_SPINLOCK_MODE)
+    auto OutputFile::spinlock() -> void {
+        while (m_atomicf.test_and_set(std::memory_order_acquire))
+            ; // Spin until the lock is acquired
+    }
+
+    auto OutputFile::spinunlock() -> void {
+        m_atomicf.clear(std::memory_order_release); // Release the lock
+    }
+#endif
+
+    auto OutputFile::lightweight_output(const rbbl::type::str &logline) -> void {
+#if defined(USE_ATOMIC_THREAD_SPINLOCK_MODE)
+        spinlock();
+        (*M_OFS) << logline << std::endl;
+        spinunlock();
+#else
+        std::lock_guard<std::mutex> lock(M_MTX_OUTPUT_FILE);
+        (*M_OFS) << logline << std::endl;
+#endif
+    }
+
+    auto OutputFile::optimized_output(const rbbl::type::str &logline) -> void {
+#if defined(USE_ATOMIC_THREAD_SPINLOCK_MODE)
+        spinlock();
+        (*M_OFS) << logline;
+        spinunlock();
+#else
+        std::lock_guard<std::mutex> lock(M_MTX_OUTPUT_FILE);
+        (*M_OFS) << logline;
+#endif
+        flush_output(m_param.write_item);
+    }
+
+    auto OutputFile::quick_output(const type::str &logline) -> void {
+#if defined(USE_ATOMIC_THREAD_SPINLOCK_MODE)
+        spinlock();
+        (*M_OFS) << logline;
+        spinunlock();
+#else
+        std::lock_guard<std::mutex> lock(M_MTX_OUTPUT_FILE);
+        (*M_OFS) << logline;
+#endif
+        flush_output(M_WRITE_ITEM_COUNT_LIMIT);
+    }
+
     auto OutputFile::rapid_output(const rbbl::type::str &logline) -> void {
         // Null todo !
     }
-#endif
 
     auto OutputFile::output(const rbbl::type::str &logline) -> void {
         if (nullptr == M_OFS) {
@@ -82,14 +117,26 @@ namespace rbbl::ott {
             return;
         }
 
-#if defined(UNLOCK_ATOMIC_THREAD_MODE)
-#else
+        // Choose the output mode based on the optimization settings
+        // Function: lightweight_output(...); unoptimized output !
         if (m_param.optimize) {
-            optimized_output(logline);
+            switch (m_param.optimize_mode) {
+            case OutputFileOptimizeMode::OPTIMIZED:
+                optimized_output(logline);
+                break;
+            case OutputFileOptimizeMode::QUICK:
+                quick_output(logline);
+                break;
+            case OutputFileOptimizeMode::RAPID:
+                rapid_output(logline);
+                break;
+            default: // OutputFileOptimizeMode::LIGHTWEIGHT
+                lightweight_output(logline);
+                break;
+            };
         } else {
-            lite_output(logline);
+            lightweight_output(logline);
         }
-#endif
     }
 
 } // namespace rbbl::ott

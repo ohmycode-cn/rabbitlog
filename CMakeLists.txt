@@ -40,9 +40,9 @@ else()
 endif()
 
 # don't modify atomic thread mode, it will cause performance loss
-# if (ATOMIC_THREAD)
-#     target_compile_definitions(${PROJECT_NAME} PRIVATE UNLOCK_ATOMIC_THREAD_MODE=1)
-# endif()
+if (ATOMIC_THREAD_SPINLOCK_MODE)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_ATOMIC_THREAD_SPINLOCK_MODE=1)
+endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     rbbl/include

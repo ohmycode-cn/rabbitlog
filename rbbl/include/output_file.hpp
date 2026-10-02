@@ -14,25 +14,36 @@
 #include <fstream>
 #include <memory>
 
-#if defined(UNLOCK_ATOMIC_THREAD_MODE)
+#if defined(USE_ATOMIC_THREAD_SPINLOCK_MODE)
+#include <atomic>
 #else
 #include <mutex>
 #endif
 
 namespace rbbl::ott {
 
+    enum class OutputFileOptimizeMode {
+        LIGHTWEIGHT = 0,
+        OPTIMIZED,
+        QUICK,
+        RAPID
+    };
+
     struct OutputFileClassFunctionParameter {
         type::str fname;
         type::str fpath;
         bool optimize{false};
+        OutputFileOptimizeMode optimize_mode{OutputFileOptimizeMode::LIGHTWEIGHT};
         int write_item{12};
     };
 
     class OutputFile : public Output {
       private:
+        static constexpr int M_WRITE_ITEM_COUNT_LIMIT{32};
         OutputFileClassFunctionParameter m_param;
 
-#if defined(UNLOCK_ATOMIC_THREAD_MODE)
+#if defined(USE_ATOMIC_THREAD_SPINLOCK_MODE)
+        std::atomic_flag m_atomicf{ATOMIC_FLAG_INIT};
 #else
         std::mutex M_MTX_OUTPUT_FILE;
 #endif
@@ -40,12 +51,16 @@ namespace rbbl::ott {
         int m_write_item_count{0};
 
       private:
-#if defined(UNLOCK_ATOMIC_THREAD_MODE)
-#else
-        auto lite_output(const type::str &logline) -> void;
-        auto optimized_output(const type::str &logline) -> void;
-        auto rapid_output(const type::str &logline) -> void;
+        auto flush_output(const int limit) -> void;
+#if defined(USE_ATOMIC_THREAD_SPINLOCK_MODE)
+      private:
+        auto spinlock() -> void;   // Spinlock for atomic thread mode
+        auto spinunlock() -> void; // Spinunlock for atomic thread mode
 #endif
+        auto lightweight_output(const type::str &logline) -> void;
+        auto optimized_output(const type::str &logline) -> void;
+        auto quick_output(const type::str &logline) -> void;
+        auto rapid_output(const type::str &logline) -> void;
 
       public:
         auto output(const type::str &logline) -> void override;

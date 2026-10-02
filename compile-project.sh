@@ -28,14 +28,21 @@ source .shared.sh
 #   --off-unit-test - Optional. Disable unit tests and build release binary.
 #   --clear-build   - Optional. Clear the build directory before building.
 #   --static        - Optional. Static link the binary. Must be used with --off-unit-test.
+#   --atomic        - Optional. Guard that opens the optimization-parameter
+#                    section. Everything after --atomic must be optimization
+#                    parameters (e.g. --use-atomic-thread-spinlock), or nothing.
+#   --use-atomic-thread-spinlock - Optional. Use atomic spinlock locking.
+#                    Must appear after --atomic.
 # Returns:
 #   0 on success, 1 on build failure.
 # Echo:
 #   Build progress and result messages.
 function main() {
-    local unit_test="ON"    # default: unit test enabled
-    local clear_build="OFF" # default: do not clear build directory
-    local static_build="OFF" # default: dynamic link
+    local unit_test="ON"                        # default: unit test enabled
+    local clear_build="OFF"                     # default: do not clear build directory
+    local static_build="OFF"                    # default: dynamic link
+    local atomic_mode="OFF"                     # default: atomic mode disabled
+    local use_atomic_thread_spinlock_mode="OFF" # default: do not use atomic thread spinlock mode
 
     if [[ "${OS}" == "Windows_NT" ]]; then
         error "Current build script does not support Windows!"
@@ -55,6 +62,31 @@ function main() {
         --static)
             static_build="ON"
             shift
+            ;;
+        --atomic)
+            atomic_mode="ON"
+            shift
+            # --atomic is an ordering guard: from here on only optimization
+            # parameters are accepted (or end of args). This prevents the
+            # optimization parameters from being mixed up with other flags.
+            while [[ $# -gt 0 ]]; do
+                case "${1}" in
+                --use-atomic-thread-spinlock)
+                    use_atomic_thread_spinlock_mode="ON"
+                    shift
+                    ;;
+                *)
+                    error "After --atomic only optimization parameters are allowed (e.g. --use-atomic-thread-spinlock), got \"${1}\"!"
+                    info "Example: bash ${0} --off-unit-test --atomic --use-atomic-thread-spinlock"
+                    return 1 &>/dev/null
+                    ;;
+                esac
+            done
+            ;;
+        --use-atomic-thread-spinlock)
+            error "--use-atomic-thread-spinlock must appear after --atomic!"
+            info "Example: bash ${0} --atomic --use-atomic-thread-spinlock"
+            return 1 &>/dev/null
             ;;
         *)
             error "Unknown option \"${1}\"!"
@@ -88,6 +120,14 @@ function main() {
         info "Link mode: Static (STATIC=ON)"
     fi
 
+    if [[ "${atomic_mode}" == "ON" ]]; then
+        if [[ "${use_atomic_thread_spinlock_mode}" == "ON" ]]; then
+            info "Atomic guard: ON, Lock mode: Spinlock (ATOMIC_THREAD_SPINLOCK_MODE=ON)"
+        else
+            info "Atomic guard: ON, Lock mode: std::mutex (default)"
+        fi
+    fi
+
     if [[ ! -f "CMakeLists.txt" ]]; then
         error "CMakeLists.txt not found. Please check the project directory: 'rabbitlog/CMakeLists.txt'"
         return 1 &>/dev/null
@@ -95,7 +135,7 @@ function main() {
 
     info "Configuring CMake ..."
 
-    if ! cmake -B "${build_dir}" -DUNIT_TEST="${unit_test}" -DSTATIC="${static_build}" 2>&1; then
+    if ! cmake -B "${build_dir}" -DUNIT_TEST="${unit_test}" -DSTATIC="${static_build}" -DATOMIC_THREAD_SPINLOCK_MODE="${use_atomic_thread_spinlock_mode}" 2>&1; then
         error "CMake configure failed."
         return 1 &>/dev/null
     fi
