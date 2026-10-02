@@ -1,0 +1,3 @@
+[WARNING]:
+
+>>> Google Test Framework Api Forbidden Replace. Just Only Allow Author Handle it ! <<<
