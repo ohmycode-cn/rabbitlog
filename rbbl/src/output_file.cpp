@@ -30,7 +30,7 @@ namespace rbbl::ott {
         if (nullptr == M_OFS) {
             return true;
         }
-        if (!M_OFS->is_open()) {
+        if (M_OFS->is_open()) {
 
             // unsafe ! ! !
             if (m_write_item_count > 0) {
